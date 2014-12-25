@@ -157,6 +157,10 @@ a:hover {
 	margin-left:4px;
 }
 
+.entry:first-child {
+	padding-top:0;
+}
+
 h1  {
 	width:345px;
 	font-size:42px;
@@ -324,7 +328,7 @@ ul.info li {
 	padding:0;
 	float:left;
 	display: block;
-	width:500px;
+	width:495px;
 	background-image:url(../images/bullet.gif);
 	background-repeat: no-repeat;
 	padding-left:10px;
