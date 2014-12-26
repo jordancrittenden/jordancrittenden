@@ -154,7 +154,7 @@ a:hover {
 	display: block;
 	padding-top:55px;
 	clear: both;
-	margin-left:4px;
+	margin:auto;
 }
 
 .section:first-child {
@@ -183,14 +183,6 @@ a:hover {
 	margin-top:-5px;
 }
 
-.section h2, .section h3, .section h4, .section h5, .section h6 {
-	display:inline-block;
-	width:175px;
-	text-align:right;
-	padding:0;
-	margin:0;
-}
-
 .section h2 {
 	font-size:22px;
 	color:#315a60;
@@ -216,11 +208,35 @@ a:hover {
 	color:#709399;
 }
 
-.section .content {
+.resume .section {
+	margin-left:4px;
+}
+
+.resume .section h2,
+.resume .section h3,
+.resume .section h4,
+.resume .section h5,
+.resume .section h6 {
+	display:inline-block;
+	width:175px;
+	text-align:right;
+	padding:0;
+	margin:0;
+}
+
+.resume .section .content {
 	display:inline-block;
 	vertical-align:top;
 	width:500px;
 	margin-left:40px;
+}
+
+.section p {
+	margin-top:12px;
+}
+
+.section p:first-of-type {
+	margin-top:0;
 }
 
 .section p img {
@@ -275,7 +291,6 @@ a:hover {
 	float:right;
 	width:500px;
 	margin-left:40px;
-	
 }
 
 .section ul.unordered li {
@@ -298,9 +313,7 @@ a:hover {
 .section ul.info li {
 	margin:0;
 	padding:0;
-	float:left;
 	display: block;
-	width:500px;
 	background-image:url(../images/bullet.gif);
 	background-repeat: no-repeat;
 	padding-left:10px;
@@ -378,8 +391,10 @@ a:hover {
 
 .section .self {
 	width:345px;
-	float:left;
 	padding-top:5px;
+}
+
+.resume .section .self {
 	margin-left:70px;
 	margin-bottom:15px;
 }
