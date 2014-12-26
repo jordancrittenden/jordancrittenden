@@ -8,6 +8,10 @@ app.use(express.static(__dirname + '/font/'));
 app.set('views', __dirname + '/');
 
 app.get('/', function (req, res) {
+	res.render('index.html');
+});
+
+app.get('/resume', function (req, res) {
 	res.render('resume.html');
 });
 
