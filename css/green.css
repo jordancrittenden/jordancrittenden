@@ -419,6 +419,10 @@ a:hover {
 	background-image:url(../images/icn-web.gif);
 }
 
+.section .self ul li.git {
+	background-image:url(../images/icn-github.jpg);
+}
+
 .section .self ul li {
 	background-repeat: no-repeat;
 	padding-left:26px;
