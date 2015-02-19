@@ -81,7 +81,6 @@ a:hover {
 #wrapper {
 	width:969px;
 	margin:0 auto;
-	margin-top:60px;
 	margin-bottom:100px;
 }
 
@@ -89,14 +88,14 @@ a:hover {
 	width:969px;
 	height:19px;
 	margin:0 auto;
-	background-image:url(../images/btop.jpg);
+	/*background-image:url(../images/btop.jpg);*/
 	background-repeat:no-repeat;
 }
 
 .wrapper-mid {
 	width:969px;
 	margin:0 auto;
-	background-image:url(../images/bmid.jpg);
+	/*background-image:url(../images/bmid.jpg);*/
 	background-repeat: repeat-y;
 	padding-bottom:40px;
 }
@@ -106,7 +105,7 @@ a:hover {
 	height:22px;
 	padding:0;
 	margin:0 auto;
-	background-image:url(../images/bbottom.jpg);
+	/*background-image:url(../images/bbottom.jpg);*/
 	background-repeat:no-repeat;
 }
 
@@ -123,7 +122,7 @@ a:hover {
 	margin:0 auto;
 	background-image:url(../images/ptop.jpg);
 	background-repeat:no-repeat;
-	height:126px;
+	height:75px;
 }
 
 #paper-mid {
@@ -168,7 +167,6 @@ a:hover {
 }
 
 .section h1  {
-	width:345px;
 	font-size:42px;
 	line-height:42px;
 	color:#315a60;
@@ -189,7 +187,7 @@ a:hover {
 }
 
 .section h3 {
-	font-size: 13px;
+	font-size: 16px;
 	color:#709399;
 }
 

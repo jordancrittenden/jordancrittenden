@@ -15,5 +15,9 @@ app.get('/resume', function (req, res) {
 	res.render('resume.html');
 });
 
+app.get('/churchill', function (req, res) {
+	res.render('churchill.html');
+});
+
 
 app.listen(process.env.PORT || 3000);
