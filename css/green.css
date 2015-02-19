@@ -233,10 +233,6 @@ a:hover {
 	margin-top:12px;
 }
 
-.section p:first-of-type {
-	margin-top:0;
-}
-
 .section p img {
 	float:right;
 	margin-left:20px;
