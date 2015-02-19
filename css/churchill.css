@@ -6,3 +6,7 @@ body {
 h1, h2 {
 	color: black !important;
 }
+
+ul li {
+	margin-bottom: 10px;
+}
