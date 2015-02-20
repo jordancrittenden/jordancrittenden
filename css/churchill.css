@@ -10,3 +10,19 @@ h1, h2 {
 ul li {
 	margin-bottom: 10px;
 }
+
+code {
+	font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
+	padding: 0.2em 0.3em;
+	margin: 0;
+	font-size: 85%;
+	background-color: rgba(0,0,0,0.04);
+	border-radius: 3px;
+}
+
+th {
+	font-weight: bold;
+}
+td {
+	padding-right: 10px;
+}
