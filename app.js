@@ -11,6 +11,14 @@ app.get('/', function (req, res) {
 	res.render('index.html');
 });
 
+app.get('/portfolio', function (req, res) {
+	res.render('portfolio.html');
+});
+
+app.get('/contact', function (req, res) {
+	res.render('contact.html');
+});
+
 app.get('/resume', function (req, res) {
 	res.render('resume.html');
 });
