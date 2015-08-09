@@ -239,3 +239,30 @@ blockquote{
 	margin: 0px;
 	padding: 0;
 }
+
+#links {
+	padding: 0;
+}
+
+#links li {
+	display: inline-block;
+	margin: 10px;
+}
+
+#links a {
+	display: inline-block;
+	width: 24px;
+	height: 24px;
+}
+
+#links a.linkedin {
+	background-image: url("../img/linkedin.png");
+}
+
+#links .github {
+	background-image: url("../img/github.png");
+}
+
+#links .stackov {
+	background-image: url("../img/stackov.png");
+}
