@@ -19,6 +19,10 @@ app.get('/resume', function (req, res) {
 	res.render('resume.html');
 });
 
+app.get('/resumeprint', function (req, res) {
+	res.render('resumeprint.html');
+});
+
 app.get('/churchill', function (req, res) {
 	res.render('churchill.html');
 });

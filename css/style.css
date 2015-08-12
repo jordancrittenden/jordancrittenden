@@ -75,8 +75,8 @@ blockquote{
 	top:33px;
 	display:block;
 	float:left;
-	background: url(../img/logo.jpg) no-repeat;
-	padding-left: 40px;
+	/*background: url(../img/logo.jpg) no-repeat;*/
+	/*padding-left: 40px;*/
 }
 
 #top h2 a {
