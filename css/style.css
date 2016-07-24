@@ -6,7 +6,7 @@ body {
 	background: url(../img/top_bg.gif);
 	background-repeat: repeat-x;
 	font-family: Verdana, Arial, sans-serif;
-	font-size: .6em;
+	font-size: 11px;
 	line-height: 17px;
 }
 
@@ -23,7 +23,7 @@ h2 {
 }
 
 ul {
-	font-size: 10px;
+	font-size: 11px;
 	margin:0;
 	padding:0 0 0 20px;
 	list-style-image: url(../img/bullet.gif);
