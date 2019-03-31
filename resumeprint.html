@@ -43,6 +43,21 @@
     display: inline-block;
     width: 70%;
   }
+  .exp {
+    display: inline-block;
+    width: 30px;
+    font-size: 8px;
+    color: gray;
+  }
+  .exp.hi::before {
+    content: "\2605\2605\2605"
+  }
+  .exp.md::before {
+    content: "\2605\2605"
+  }
+  .exp.lo::before {
+    content: "\2605"
+  }
   .skills {
     width: 65% !important;
     margin: 10px 0 0 0;
@@ -53,6 +68,9 @@
   }
   #content h2 {
     padding-bottom: 0 !important;
+  }
+  em {
+    color: #555;
   }
 </style>
 </head>
@@ -155,34 +173,39 @@
     <div class="section">
       <h2>SKILLS</h2>
       <div class="subsection">
+        <div style="margin-top:10px">
+          <span class="exp hi"></span> 4+ Years of professional use as a primary language or platform<br />
+          <span class="exp md"></span> 1+ Years of professional use as a primary language or platform<br />
+          <span class="exp lo"></span> Familiarity and/or non-professional use<br />
+        </div>
         <h3>Languages</h3>
         <ul class="content skills">
-          <li>C / C++17</li>
-          <li>C&#9839;</li>
-          <li>Java</li>
-          <li>Python</li>
-          <li>MATLAB</li>
-          <li>SQL</li>
-          <li>Verilog &amp; VHDL</li>
+          <li><span class="exp hi"></span> C / C++17</li>
+          <li><span class="exp hi"></span> C&#9839;</li>
+          <li><span class="exp hi"></span> Java</li>
+          <li><span class="exp lo"></span> Python</li>
+          <li><span class="exp md"></span> MATLAB</li>
+          <li><span class="exp md"></span> SQL</li>
+          <li><span class="exp md"></span> Verilog &amp; VHDL</li>
         </ul>
       </div>
       <div class="subsection">
         <h3>Web</h3>
         <ul class="content skills">
-          <li>CSS / HTML</li>
-          <li>JavaScript / jQuery</li>
-          <li>KnockoutJS</li>
+          <li><span class="exp hi"></span> CSS / HTML</li>
+          <li><span class="exp hi"></span> JavaScript / jQuery</li>
+          <li><span class="exp md"></span> KnockoutJS</li>
         </ul>
       </div>
       <div class="subsection">
         <h3>Platforms</h3>
         <ul class="content skills">
-          <li>Visual Studio</li>
-          <li>Windows API</li>
-          <li>ASP.NET / IIS</li>
-          <li>Amazon Web Services</li>
-          <li>SQL Server</li>
-          <li>Node.js</li>
+          <li><span class="exp hi"></span> Visual Studio</li>
+          <li><span class="exp hi"></span> Windows API</li>
+          <li><span class="exp hi"></span> ASP.NET / IIS</li>
+          <li><span class="exp hi"></span> Amazon Web Services</li>
+          <li><span class="exp hi"></span> SQL Server</li>
+          <li><span class="exp lo"></span> Node.js</li>
         </ul>
       </div>
     </div>
