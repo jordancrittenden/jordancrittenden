@@ -9,19 +9,12 @@
   body {
     background: #fff;
   }
-  #top {
-    width: 100%;
-    height: 75px;
-    color: black;
-    background: #fff;
+  #name {
+    font-size: 24px;
+    color: #333;
     border-bottom: solid 2px silver;
-  }
-  #top h2 {
-    float: none;
-    letter-spacing: 0;
-  }
-  #top h2 a {
-    color: black;
+    margin-top: 80px;
+    padding-bottom: 10px;
   }
   #contact {
     margin-top: 11px;
@@ -42,6 +35,9 @@
   .section .content {
     display: inline-block;
     width: 70%;
+  }
+  .subsection {
+    margin-bottom: 7px;
   }
   .exp {
     display: inline-block;
@@ -78,10 +74,12 @@
 </head>
 <body>
 <div id="wrap">
-  <div id="top">
-    <h2><a href="/">Jordan Crittenden</a></h2>
-  </div>
+  <h2 id="name">Jordan Crittenden</h2>
   <div id="content">
+    <div class="section">
+      <h2>OBJECTIVE</h2>
+      <p>Seeking a position in systems and/or embedded programming with a focus on algorithms and optimzation for video processing pipelines.</p>
+    </div>
     <div class="section">
       <h2>CONTACT</h2>
       <div id="contact" class="content">
@@ -97,14 +95,14 @@
         <h3>Dec 2015 - Present</h3>
         <div class="content">
           <p>Churchill Navigation, Boulder</p>
-          <em>Engineering Coordinator, Oct 2017 - Present</em><br />
-          <em>Lead Software Engineer - ION Project, Dec 2016 - Oct 2017</em><br />
+          <em>Lead Software Engineer, Dec 2016 - Present</em><br />
           <em>Software Engineer, Dec 2015 - Dec 2016</em><br />
           <ul class="info">
             <li>Project manager and lead developer for the ION video and metadata recorder, a team of ~5 engineers.</li>
             <li>Authored a C++ flowgraph software API underlying two flagship products.</li>
             <li>Developed a web editor for real-time construction and monitoring of software graphs.</li>
-            <li>Wrote libraries for KLV, Intel QuickSync trancoding, time synchronization, etc.</li>
+            <li>Developed software to process and transform high speed video signals.</li>
+            <li>Wrote libraries for KLV, Intel QuickSync transcoding, time synchronization, etc.</li>
             <li>Integrated 3rd party hardware over serial, cameralink, UDP, TCP/IP, RTSP, SNMP, ARINC-429, and other protocols.</li>
             <li>Spearheaded a formal review and compensation program.</li>
             <li>Implemented periodic technical talks.</li>
