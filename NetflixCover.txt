@@ -1,0 +1,7 @@
+To the hiring manager:
+
+The posted position (Software Engineer, Video Encoding for Live Streaming (L4/L5)) caught my eye immediately. At a previous job, I led a team building a video and metadata recorder for airborne applications, and in the process became fascinated with video. I wrote a library for leveraging Intel's fixed-function video encoder and decoder, and over the years experimented with many aspects of the video pipeline, such as reliable transport over UDP with RTP / RTSP, live streaming to the web with MPEG-DASH, transcoding, applying filters and image processing, and working with various container formats. I'm also interested in the possibility of using deep learning to design new codecs. I studied Electrical Engineering in college with a focus on signal processing, and think that this position would be an ideal intersection of all of my previous experience.
+
+I'm a Netflix subscriber and love the product and I'm drawn to Netflix's no-compromise approach to building a great team. Thanks for taking the time to review my application.
+
+-Jordan
