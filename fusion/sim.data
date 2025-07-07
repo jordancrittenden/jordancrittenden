@@ -3,14 +3,16 @@ struct BTracerParams {
     enableParticleFieldContributions: u32,
     nTracers: u32,
     tracerLength: u32,
+    curTraceIdx: u32,
 }
 
-@group(0) @binding(0) var<storage, read> nParticles: u32;
+@group(0) @binding(0) var<storage, read_write> nParticles: u32;
 @group(0) @binding(1) var<storage, read_write> bTracerTrails: array<vec3<f32>>;
-@group(0) @binding(2) var<storage, read> particlePos: array<vec4<f32>>;
-@group(0) @binding(3) var<storage, read> particleVel: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read_write> particlePos: array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read_write> particleVel: array<vec4<f32>>;
 @group(0) @binding(4) var<storage, read> currentSegments: array<vec4<f32>>;
-@group(0) @binding(5) var<uniform> params: BTracerParams;
+@group(0) @binding(5) var<storage, read_write> debug: array<vec4<f32>>;
+@group(0) @binding(6) var<uniform> params: BTracerParams;
 
 @compute @workgroup_size(256)
 fn updateTrails(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -18,26 +20,196 @@ fn updateTrails(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (id >= params.nTracers) {
         return;
     }
+    if (params.curTraceIdx == 0) {
+        return;
+    }
+
+    // Calculate the B field at last trace location
+    var E = vec3<f32>(0.0, 0.0, 0.0);
+    var B = vec3<f32>(0.0, 0.0, 0.0);
 
     let traceStart = id * params.tracerLength;
-    var loc = bTracerTrails[traceStart];
+    let pLoc = bTracerTrails[traceStart + params.curTraceIdx - 1];
 
-    for (var i: u32 = 1u; i < params.tracerLength; i++) {
-        // Calculate the B field at location
-        var E = vec3<f32>(0.0, 0.0, 0.0);
-        var B = vec3<f32>(0.0, 0.0, 0.0);
-
-        if (params.enableParticleFieldContributions != 0u) {
-            var unused: i32 = -1;
-            compute_particle_field_contributions(nParticles, &particlePos, &particleVel, loc, -1, &E, &B, &unused);
-        }
-
-        compute_current_field_contributions(&currentSegments, params.nCurrentSegments, loc, &B);
-
-        loc += normalize(B) * 0.005 * _M;
-        bTracerTrails[traceStart + i] = loc;
+    if (params.enableParticleFieldContributions != 0u) {
+        var unused: i32 = -1;
+        compute_particle_field_contributions(nParticles, &particlePos, &particleVel, pLoc, -1, &E, &B, &unused);
     }
-} struct DefragParams {
+
+    B += compute_currents_b_field(&currentSegments, params.nCurrentSegments, pLoc);
+    
+    // Compute normalized B vector
+    // First scale up the field to avoid underflow when normalizing
+    B *= 1e10;
+    var B_norm = vec3<f32>(0.0);
+    if (length(B) > 0.0) {
+        B_norm = normalize(B);
+    }
+
+    bTracerTrails[traceStart + params.curTraceIdx] = pLoc + B_norm * 0.005 * _M;
+    debug[id] = vec4<f32>(B, length(B));
+}// The index of the neighbors of cell x, y, z
+struct CellNeighbors {
+    i32 xp_yp_zp; // x+1, y+1, z+1
+    i32 xp_yp_z0; // x+1, y+1, z
+    i32 xp_yp_zm; // x+1, y+1, z-1
+    i32 xp_y0_zp; // x+1, y,   z+1
+    i32 xp_y0_z0; // x+1, y,   z
+    i32 xp_y0_zm; // x+1, y,   z-1
+    i32 xp_ym_zp; // x+1, y-1, z+1
+    i32 xp_ym_z0; // x+1, y-1, z
+    i32 xp_ym_zm; // x+1, y-1, z-1
+
+    i32 x0_yp_zp; // x, y+1, z+1
+    i32 x0_yp_z0; // x, y+1, z
+    i32 x0_yp_zm; // x, y+1, z-1
+    i32 x0_y0_zp; // x, y,   z+1
+    // omit cell x, y, z
+    i32 x0_y0_zm; // x, y,   z-1
+    i32 x0_ym_zp; // x, y-1, z+1
+    i32 x0_ym_z0; // x, y-1, z
+    i32 x0_ym_zm; // x, y-1, z-1
+
+    i32 xm_yp_zp; // x-1, y+1, z+1
+    i32 xm_yp_z0; // x-1, y+1, z
+    i32 xm_yp_zm; // x-1, y+1, z-1
+    i32 xm_y0_zp; // x-1, y,   z+1
+    i32 xm_y0_z0; // x-1, y,   z
+    i32 xm_y0_zm; // x-1, y,   z-1
+    i32 xm_ym_zp; // x-1, y-1, z+1
+    i32 xm_ym_z0; // x-1, y-1, z
+    i32 xm_ym_zm; // x-1, y-1, z-1
+}
+
+struct ParticleNeighbors {
+    i32 xp_yp_zp; // x+, y+, z+
+    i32 xp_yp_zm; // x+, y+, z-
+    i32 xp_ym_zp; // x+, y-, z+
+    i32 xp_ym_zm; // x+, y-, z-
+    i32 xm_yp_zp; // x-, y+, z+
+    i32 xm_yp_zm; // x-, y+, z-
+    i32 xm_ym_zp; // x-, y-, z+
+    i32 xm_ym_zm; // x-, y-, z-
+}
+
+fn grid_neighbors(idx: u32, nx: u32, ny: u32, nz: u32) -> CellNeighbors {
+    // Calculate 3D coordinates from linear index
+    // Order: x-major, then z-major, then y-major
+    // idx = (x_idx * nz * ny) + (z_idx * ny) + y_idx
+    let x_idx: u32 = idx / (nz * ny);
+    let remainder: u32 = idx % (nz * ny);
+    let z_idx: u32 = remainder / ny;
+    let y_idx: u32 = remainder % ny;
+    
+    // Helper function to convert 3D coordinates back to linear index
+    fn to_linear_index(x: i32, y: i32, z: i32, nx: u32, ny: u32, nz: u32) -> i32 {
+        if (x < 0 || y < 0 || z < 0 || u32(x) >= nx || u32(y) >= ny || u32(z) >= nz) {
+            return -1i; // Out of bounds
+        }
+        return i32((u32(x) * nz * ny) + (u32(z) * ny) + u32(y));
+    }
+    
+    // Calculate neighbor indices
+    var neighbors: CellNeighbors;
+    
+    // x+1 neighbors
+    neighbors.xp_yp_zp = to_linear_index(i32(x_idx) + 1, i32(y_idx) + 1, i32(z_idx) + 1, nx, ny, nz);
+    neighbors.xp_yp_z0 = to_linear_index(i32(x_idx) + 1, i32(y_idx) + 1, i32(z_idx), nx, ny, nz);
+    neighbors.xp_yp_zm = to_linear_index(i32(x_idx) + 1, i32(y_idx) + 1, i32(z_idx) - 1, nx, ny, nz);
+    neighbors.xp_y0_zp = to_linear_index(i32(x_idx) + 1, i32(y_idx), i32(z_idx) + 1, nx, ny, nz);
+    neighbors.xp_y0_z0 = to_linear_index(i32(x_idx) + 1, i32(y_idx), i32(z_idx), nx, ny, nz);
+    neighbors.xp_y0_zm = to_linear_index(i32(x_idx) + 1, i32(y_idx), i32(z_idx) - 1, nx, ny, nz);
+    neighbors.xp_ym_zp = to_linear_index(i32(x_idx) + 1, i32(y_idx) - 1, i32(z_idx) + 1, nx, ny, nz);
+    neighbors.xp_ym_z0 = to_linear_index(i32(x_idx) + 1, i32(y_idx) - 1, i32(z_idx), nx, ny, nz);
+    neighbors.xp_ym_zm = to_linear_index(i32(x_idx) + 1, i32(y_idx) - 1, i32(z_idx) - 1, nx, ny, nz);
+    
+    // x neighbors (same x)
+    neighbors.x0_yp_zp = to_linear_index(i32(x_idx), i32(y_idx) + 1, i32(z_idx) + 1, nx, ny, nz);
+    neighbors.x0_yp_z0 = to_linear_index(i32(x_idx), i32(y_idx) + 1, i32(z_idx), nx, ny, nz);
+    neighbors.x0_yp_zm = to_linear_index(i32(x_idx), i32(y_idx) + 1, i32(z_idx) - 1, nx, ny, nz);
+    neighbors.x0_y0_zp = to_linear_index(i32(x_idx), i32(y_idx), i32(z_idx) + 1, nx, ny, nz);
+    // neighbors.x0_y0_z0 is the current cell (omitted)
+    neighbors.x0_y0_zm = to_linear_index(i32(x_idx), i32(y_idx), i32(z_idx) - 1, nx, ny, nz);
+    neighbors.x0_ym_zp = to_linear_index(i32(x_idx), i32(y_idx) - 1, i32(z_idx) + 1, nx, ny, nz);
+    neighbors.x0_ym_z0 = to_linear_index(i32(x_idx), i32(y_idx) - 1, i32(z_idx), nx, ny, nz);
+    neighbors.x0_ym_zm = to_linear_index(i32(x_idx), i32(y_idx) - 1, i32(z_idx) - 1, nx, ny, nz);
+    
+    // x-1 neighbors
+    neighbors.xm_yp_zp = to_linear_index(i32(x_idx) - 1, i32(y_idx) + 1, i32(z_idx) + 1, nx, ny, nz);
+    neighbors.xm_yp_z0 = to_linear_index(i32(x_idx) - 1, i32(y_idx) + 1, i32(z_idx), nx, ny, nz);
+    neighbors.xm_yp_zm = to_linear_index(i32(x_idx) - 1, i32(y_idx) + 1, i32(z_idx) - 1, nx, ny, nz);
+    neighbors.xm_y0_zp = to_linear_index(i32(x_idx) - 1, i32(y_idx), i32(z_idx) + 1, nx, ny, nz);
+    neighbors.xm_y0_z0 = to_linear_index(i32(x_idx) - 1, i32(y_idx), i32(z_idx), nx, ny, nz);
+    neighbors.xm_y0_zm = to_linear_index(i32(x_idx) - 1, i32(y_idx), i32(z_idx) - 1, nx, ny, nz);
+    neighbors.xm_ym_zp = to_linear_index(i32(x_idx) - 1, i32(y_idx) - 1, i32(z_idx) + 1, nx, ny, nz);
+    neighbors.xm_ym_z0 = to_linear_index(i32(x_idx) - 1, i32(y_idx) - 1, i32(z_idx), nx, ny, nz);
+    neighbors.xm_ym_zm = to_linear_index(i32(x_idx) - 1, i32(y_idx) - 1, i32(z_idx) - 1, nx, ny, nz);
+    
+    return neighbors;
+}
+
+fn particle_neighbors(
+    x: f32, y: f32, z: f32,
+    xmin: f32, ymin: f32, zmin: f32,
+    xmax: f32, ymax: f32, zmax: f32,
+    nx: u32, ny: u32, nz: u32) -> ParticleNeighbors {
+    
+    // Check if particle is outside the grid bounds
+    if (x < xmin || x >= xmax || y < ymin || y >= ymax || z < zmin || z >= zmax) {
+        var neighbors: ParticleNeighbors;
+        neighbors.xp_yp_zp = -1i;
+        neighbors.xp_yp_zm = -1i;
+        neighbors.xp_ym_zp = -1i;
+        neighbors.xp_ym_zm = -1i;
+        neighbors.xm_yp_zp = -1i;
+        neighbors.xm_yp_zm = -1i;
+        neighbors.xm_ym_zp = -1i;
+        neighbors.xm_ym_zm = -1i;
+        return neighbors;
+    }
+    
+    // Calculate cell size
+    let dx: f32 = (xmax - xmin) / f32(nx);
+    let dy: f32 = (ymax - ymin) / f32(ny);
+    let dz: f32 = (zmax - zmin) / f32(nz);
+    
+    // Calculate which cell the particle is in
+    let cell_x: i32 = i32((x - xmin) / dx);
+    let cell_y: i32 = i32((y - ymin) / dy);
+    let cell_z: i32 = i32((z - zmin) / dz);
+    
+    // Helper function to convert 3D coordinates to linear index
+    fn to_linear_index(x: i32, y: i32, z: i32, nx: u32, ny: u32, nz: u32) -> i32 {
+        if (x < 0 || y < 0 || z < 0 || u32(x) >= nx || u32(y) >= ny || u32(z) >= nz) {
+            return -1i; // Out of bounds
+        }
+        return i32((u32(x) * nz * ny) + (u32(z) * ny) + u32(y));
+    }
+    
+    // Determine which of the 8 surrounding cells to use based on particle position within the cell
+    let local_x: f32 = (x - xmin) / dx - f32(cell_x);
+    let local_y: f32 = (y - ymin) / dy - f32(cell_y);
+    let local_z: f32 = (z - zmin) / dz - f32(cell_z);
+    
+    // Calculate which cell to base calculations off of
+    let base_x: i32 = cell_x + select(-1, 0, local_x > 0.5);
+    let base_y: i32 = cell_y + select(-1, 0, local_y > 0.5);
+    let base_z: i32 = cell_z + select(-1, 0, local_z > 0.5);
+    
+    // Calculate the 8 corner cells around the particle
+    var neighbors: ParticleNeighbors;
+
+    neighbors.xp_yp_zp = to_linear_index(base_x + 1, base_y + 1, base_z + 1, nx, ny, nz); // x+, y+, z+
+    neighbors.xp_yp_zm = to_linear_index(base_x + 1, base_y + 1, base_z, nx, ny, nz); // x+, y+, z-
+    neighbors.xp_ym_zp = to_linear_index(base_x + 1, base_y, base_z + 1, nx, ny, nz); // x+, y-, z+
+    neighbors.xp_ym_zm = to_linear_index(base_x + 1, base_y, base_z, nx, ny, nz); // x+, y-, z-
+    neighbors.xm_yp_zp = to_linear_index(base_x, base_y + 1, base_z + 1, nx, ny, nz); // x-, y+, z+
+    neighbors.xm_yp_zm = to_linear_index(base_x, base_y + 1, base_z, nx, ny, nz); // x-, y+, z-
+    neighbors.xm_ym_zp = to_linear_index(base_x, base_y, base_z + 1, nx, ny, nz); // x-, y-, z+
+    neighbors.xm_ym_zm = to_linear_index(base_x, base_y, base_z, nx, ny, nz); // x-, y-, z-
+    
+    return neighbors;
+}struct DefragParams {
     maxParticles: u32,
 }
 
@@ -68,18 +240,18 @@ fn defrag() {
 
     nParticles = write_head;
 } struct ETracerParams {
-    nCurrentSegments: u32,
     solenoidFlux: f32,
     enableParticleFieldContributions: u32,
     nTracers: u32,
     tracerLength: u32,
+    curTraceIdx: u32,
 }
 
-@group(0) @binding(0) var<storage, read> nParticles: u32;
+@group(0) @binding(0) var<storage, read_write> nParticles: u32;
 @group(0) @binding(1) var<storage, read_write> eTracerTrails: array<vec3<f32>>;
-@group(0) @binding(2) var<storage, read> particlePos: array<vec4<f32>>;
-@group(0) @binding(3) var<storage, read> particleVel: array<vec4<f32>>;
-@group(0) @binding(4) var<storage, read> currentSegments: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read_write> particlePos: array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read_write> particleVel: array<vec4<f32>>;
+@group(0) @binding(4) var<storage, read_write> debug: array<vec4<f32>>;
 @group(0) @binding(5) var<uniform> params: ETracerParams;
 
 @compute @workgroup_size(256)
@@ -88,29 +260,35 @@ fn updateTrails(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (id >= params.nTracers) {
         return;
     }
+    if (params.curTraceIdx == 0) {
+        return;
+    }
+
+    // Calculate the E field at location
+    var E = vec3<f32>(0.0, 0.0, 0.0);
+    var B = vec3<f32>(0.0, 0.0, 0.0);
 
     let traceStart = id * params.tracerLength;
-    var loc = eTracerTrails[traceStart];
+    let pLoc = eTracerTrails[traceStart + params.curTraceIdx - 1];
 
-    for (var i: u32 = 1u; i < params.tracerLength; i++) {
-        // Calculate the E field at location
-        var E = vec3<f32>(0.0, 0.0, 0.0);
-        var B = vec3<f32>(0.0, 0.0, 0.0);
-
-        if (params.enableParticleFieldContributions != 0u) {
-            var unused: i32 = -1;
-            compute_particle_field_contributions(nParticles, &particlePos, &particleVel, loc, -1, &E, &B, &unused);
-        }
-
-        // Calculate the contribution of the central solenoid
-        let solenoid_axis = vec3<f32>(0.0, 1.0, 0.0);
-        let solenoid_r = vec3<f32>(loc.x, 0.0, loc.z);
-        let solenoid_e_mag = params.solenoidFlux / (2.0 * PI * length(solenoid_r));
-        E += solenoid_e_mag * cross(solenoid_axis, normalize(solenoid_r));
-
-        loc += normalize(E) * 0.005 * _M;
-        eTracerTrails[traceStart + i] = loc;
+    if (params.enableParticleFieldContributions != 0u) {
+        var unused: i32 = -1;
+        compute_particle_field_contributions(nParticles, &particlePos, &particleVel, pLoc, -1, &E, &B, &unused);
     }
+
+    // Calculate the contribution of the central solenoid
+    E += compute_solenoid_e_field(params.solenoidFlux, pLoc);
+
+    // Compute normalized E vector
+    // First scale up the field to avoid underflow when normalizing
+    E *= 1e10;
+    var E_norm = vec3<f32>(0.0);
+    if (length(E) > 0.0) {
+        E_norm = normalize(E);
+    }
+
+    eTracerTrails[traceStart + params.curTraceIdx] = pLoc + E_norm * 0.005 * _M;
+    debug[id] = vec4<f32>(E, length(E));
 } fn compute_particle_field_contributions(
     nParticles: u32,
     particlePos: ptr<storage, array<vec4<f32>>, read_write>,
@@ -150,22 +328,34 @@ fn updateTrails(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 }
 
-fn compute_current_field_contributions(
+fn compute_currents_b_field(
     currentSegments: ptr<storage, array<vec4<f32>>, read>,
     nCurrentSegments: u32,
-    loc: vec3<f32>,
-    B: ptr<function, vec3<f32>>
-) {
+    loc: vec3<f32>
+) -> vec3<f32> {
+    var B = vec3<f32>(0.0, 0.0, 0.0);
     for (var j: u32 = 0u; j < nCurrentSegments; j++) {
         let current_x = vec3<f32>((*currentSegments)[j * 3u].xyz);
         let current_dx = vec3<f32>((*currentSegments)[j * 3u + 1u].xyz);
         let current_i = (*currentSegments)[j * 3u + 2u].x;
+        if (current_i == 0.0) { continue; }
 
         let r = loc - current_x;
         let r_mag = length(r);
 
-        *B += MU_0_OVER_4_PI * current_i * cross(current_dx, r) / (r_mag * r_mag * r_mag);
+        B += MU_0_OVER_4_PI * current_i * cross(current_dx, r) / (r_mag * r_mag * r_mag);
     }
+    return B;
+}
+
+fn compute_solenoid_e_field(
+    solenoidFlux: f32,
+    loc: vec3<f32>,
+) -> vec3<f32> {
+    let solenoid_axis = vec3<f32>(0.0, 1.0, 0.0);
+    let solenoid_r = vec3<f32>(loc.x, 0.0, loc.z);
+    let solenoid_e_mag = solenoidFlux / (2.0 * PI * length(solenoid_r));
+    return solenoid_e_mag * cross(solenoid_axis, normalize(solenoid_r));
 } struct ComputeFieldsParams {
     nCells: u32,
     nCurrentSegments: u32,
@@ -202,13 +392,11 @@ fn computeFields(@builtin(global_invocation_id) global_id: vec3<u32>) {
         compute_particle_field_contributions(nParticles, &particlePos, &particleVel, loc, -1, &E, &B, &unused);
     }
 
-    compute_current_field_contributions(&currentSegments, params.nCurrentSegments, loc, &B);
+    // Calculate the contribution of the currents
+    B += compute_currents_b_field(&currentSegments, params.nCurrentSegments, loc);
 
     // Calculate the contribution of the central solenoid
-    let solenoid_axis = vec3<f32>(0.0, 1.0, 0.0);
-    let solenoid_r = vec3<f32>(loc.x, 0.0, loc.z);
-    let solenoid_e_mag = params.solenoidFlux / (2.0 * PI * length(solenoid_r));
-    E += solenoid_e_mag * cross(solenoid_axis, normalize(solenoid_r));
+    E += compute_solenoid_e_field(params.solenoidFlux, loc);
 
     eField[id] = vec4<f32>(E, 0.0);
     bField[id] = vec4<f32>(B, 0.0);
@@ -293,13 +481,11 @@ fn computeMotion(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
     }
 
-    compute_current_field_contributions(&currentSegments, params.nCurrentSegments, pos, &B);
+    // Calculate the contribution of the currents
+    B += compute_currents_b_field(&currentSegments, params.nCurrentSegments, pos);
 
     // Calculate the contribution of the central solenoid
-    let solenoid_axis = vec3<f32>(0.0, 1.0, 0.0);
-    let solenoid_r = vec3<f32>(pos.x, 0.0, pos.z);
-    let solenoid_e_mag = params.solenoidFlux / (2.0 * PI * length(solenoid_r));
-    E += solenoid_e_mag * cross(solenoid_axis, normalize(solenoid_r));
+    E += compute_solenoid_e_field(params.solenoidFlux, pos);
 
     // Push the particle through the electric and magnetic field: dv/dt = q/m (E + v x B);
     let t = q_over_m * B * 0.5 * params.dt;
@@ -314,7 +500,7 @@ fn computeMotion(@builtin(global_invocation_id) global_id: vec3<u32>) {
     particleVel[id] = vec4<f32>(vel_new, 0.0);
 
     let v_mag = length(vel_new);
-    debug[id] = vec4<f32>(0.5 * mass * v_mag * v_mag, species, 0.0, 0.0);
+    debug[id] = vec4<f32>(B, 0.0);
 
     if (CONSTRAIN) {
         // Keep the particles in their box
@@ -519,442 +705,6 @@ fn charge_to_mass_ratio(species: f32) -> f32 {
         return Q_OVER_M_TRITON;
     }
     return 0.0; // error case, should never happen
-}struct BTracerParams {
-    nCurrentSegments: u32,
-    enableParticleFieldContributions: u32,
-    nTracers: u32,
-    tracerLength: u32,
-}
-
-@group(0) @binding(0) var<storage, read> nParticles: u32;
-@group(0) @binding(1) var<storage, read_write> bTracerTrails: array<vec3<f32>>;
-@group(0) @binding(2) var<storage, read> particlePos: array<vec4<f32>>;
-@group(0) @binding(3) var<storage, read> particleVel: array<vec4<f32>>;
-@group(0) @binding(4) var<storage, read> currentSegments: array<vec4<f32>>;
-@group(0) @binding(5) var<uniform> params: BTracerParams;
-
-@compute @workgroup_size(256)
-fn updateTrails(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let id = global_id.x;
-    if (id >= params.nTracers) {
-        return;
-    }
-
-    let traceStart = id * params.tracerLength;
-    var loc = bTracerTrails[traceStart];
-
-    for (var i: u32 = 1u; i < params.tracerLength; i++) {
-        // Calculate the B field at location
-        var E = vec3<f32>(0.0, 0.0, 0.0);
-        var B = vec3<f32>(0.0, 0.0, 0.0);
-
-        if (params.enableParticleFieldContributions != 0u) {
-            var unused: i32 = -1;
-            compute_particle_field_contributions(nParticles, &particlePos, &particleVel, loc, -1, &E, &B, &unused);
-        }
-
-        compute_current_field_contributions(&currentSegments, params.nCurrentSegments, loc, &B);
-
-        loc += normalize(B) * 0.005 * _M;
-        bTracerTrails[traceStart + i] = loc;
-    }
-} struct DefragParams {
-    maxParticles: u32,
-}
-
-@group(0) @binding(0) var<storage, read_write> nParticles: u32;
-@group(0) @binding(1) var<storage, read_write> particlePos: array<vec4<f32>>;
-@group(0) @binding(2) var<storage, read_write> particleVel: array<vec4<f32>>;
-@group(0) @binding(3) var<uniform> params: DefragParams;
-
-@compute @workgroup_size(1)
-fn defrag() {
-    var write_head: u32 = 0u;
-    
-    for (var i: u32 = 0u; i < params.maxParticles; i++) {
-        let species = particlePos[i].w;
-        if (species == 0.0) {
-            continue;
-        }
-
-        if (write_head < i) {
-            particlePos[write_head] = particlePos[i];
-            particleVel[write_head] = particleVel[i];
-            particlePos[i] = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-            particleVel[i] = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-        }
-
-        write_head++;
-    }
-
-    nParticles = write_head;
-} struct ETracerParams {
-    nCurrentSegments: u32,
-    solenoidFlux: f32,
-    enableParticleFieldContributions: u32,
-    nTracers: u32,
-    tracerLength: u32,
-}
-
-@group(0) @binding(0) var<storage, read> nParticles: u32;
-@group(0) @binding(1) var<storage, read_write> eTracerTrails: array<vec3<f32>>;
-@group(0) @binding(2) var<storage, read> particlePos: array<vec4<f32>>;
-@group(0) @binding(3) var<storage, read> particleVel: array<vec4<f32>>;
-@group(0) @binding(4) var<storage, read> currentSegments: array<vec4<f32>>;
-@group(0) @binding(5) var<uniform> params: ETracerParams;
-
-@compute @workgroup_size(256)
-fn updateTrails(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let id = global_id.x;
-    if (id >= params.nTracers) {
-        return;
-    }
-
-    let traceStart = id * params.tracerLength;
-    var loc = eTracerTrails[traceStart];
-
-    for (var i: u32 = 1u; i < params.tracerLength; i++) {
-        // Calculate the E field at location
-        var E = vec3<f32>(0.0, 0.0, 0.0);
-        var B = vec3<f32>(0.0, 0.0, 0.0);
-
-        if (params.enableParticleFieldContributions != 0u) {
-            var unused: i32 = -1;
-            compute_particle_field_contributions(nParticles, &particlePos, &particleVel, loc, -1, &E, &B, &unused);
-        }
-
-        // Calculate the contribution of the central solenoid
-        let solenoid_axis = vec3<f32>(0.0, 1.0, 0.0);
-        let solenoid_r = vec3<f32>(loc.x, 0.0, loc.z);
-        let solenoid_e_mag = params.solenoidFlux / (2.0 * PI * length(solenoid_r));
-        E += solenoid_e_mag * cross(solenoid_axis, normalize(solenoid_r));
-
-        loc += normalize(E) * 0.005 * _M;
-        eTracerTrails[traceStart + i] = loc;
-    }
-} fn compute_particle_field_contributions(
-    nParticles: u32,
-    particlePos: ptr<storage, array<vec4<f32>>, read_write>,
-    particleVel: ptr<storage, array<vec4<f32>>, read_write>,
-    loc: vec3<f32>,
-    skipId: i32,
-    E: ptr<function, vec3<f32>>,
-    B: ptr<function, vec3<f32>>,
-    colliderId: ptr<function, i32>
-) {
-    for (var i: u32 = 0u; i < nParticles; i++) {
-        if (i == u32(skipId)) {
-            continue;
-        }
-
-        let species = (*particlePos)[i].w;
-        if (species == 0.0) {
-            continue; // inactive particle
-        }
-
-        let pos = vec3<f32>((*particlePos)[i].xyz);
-        let vel = vec3<f32>((*particleVel)[i].xyz);
-        let charge = particle_charge(species);
-
-        let r = loc - pos;
-        let r_norm = normalize(r);
-        let r_mag = length(r);
-
-        // Avoid division by zero
-        if (r_mag < 0.00001) {
-            *colliderId = i32(i);
-            continue;
-        } else {
-            *E += ((K_E * charge) / (r_mag * r_mag)) * r_norm;
-            *B += ((MU_0_OVER_4_PI * charge) / (r_mag * r_mag)) * cross(vel, r_norm);
-        }
-    }
-}
-
-fn compute_current_field_contributions(
-    currentSegments: ptr<storage, array<vec4<f32>>, read>,
-    nCurrentSegments: u32,
-    loc: vec3<f32>,
-    B: ptr<function, vec3<f32>>
-) {
-    for (var j: u32 = 0u; j < nCurrentSegments; j++) {
-        let current_x = vec3<f32>((*currentSegments)[j * 3u].xyz);
-        let current_dx = vec3<f32>((*currentSegments)[j * 3u + 1u].xyz);
-        let current_i = (*currentSegments)[j * 3u + 2u].x;
-
-        let r = loc - current_x;
-        let r_mag = length(r);
-
-        *B += MU_0_OVER_4_PI * current_i * cross(current_dx, r) / (r_mag * r_mag * r_mag);
-    }
-} struct ComputeFieldsParams {
-    nCells: u32,
-    nCurrentSegments: u32,
-    solenoidFlux: f32,
-    enableParticleFieldContributions: u32,
-}
-
-@group(0) @binding(0) var<storage, read_write> nParticles: u32;
-@group(0) @binding(1) var<storage, read> cellLocation: array<vec4<f32>>;
-@group(0) @binding(2) var<storage, read_write> eField: array<vec4<f32>>;
-@group(0) @binding(3) var<storage, read_write> bField: array<vec4<f32>>;
-@group(0) @binding(4) var<storage, read_write> particlePos: array<vec4<f32>>;
-@group(0) @binding(5) var<storage, read_write> particleVel: array<vec4<f32>>;
-@group(0) @binding(6) var<storage, read> currentSegments: array<vec4<f32>>;
-@group(0) @binding(7) var<storage, read_write> debug: array<vec4<f32>>;
-@group(0) @binding(8) var<uniform> params: ComputeFieldsParams;
-
-@compute @workgroup_size(256)
-fn computeFields(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let id = global_id.x;
-    if (id >= params.nCells) {
-        return;
-    }
-
-    // Extract position for this cell
-    let loc = vec3<f32>(cellLocation[id].xyz);
-
-    // Calculate the E and B field at location
-    var E = vec3<f32>(0.0, 0.0, 0.0);
-    var B = vec3<f32>(0.0, 0.0, 0.0);
-
-    if (params.enableParticleFieldContributions != 0u) {
-        var unused: i32 = -1;
-        compute_particle_field_contributions(nParticles, &particlePos, &particleVel, loc, -1, &E, &B, &unused);
-    }
-
-    compute_current_field_contributions(&currentSegments, params.nCurrentSegments, loc, &B);
-
-    // Calculate the contribution of the central solenoid
-    let solenoid_axis = vec3<f32>(0.0, 1.0, 0.0);
-    let solenoid_r = vec3<f32>(loc.x, 0.0, loc.z);
-    let solenoid_e_mag = params.solenoidFlux / (2.0 * PI * length(solenoid_r));
-    E += solenoid_e_mag * cross(solenoid_axis, normalize(solenoid_r));
-
-    eField[id] = vec4<f32>(E, 0.0);
-    bField[id] = vec4<f32>(B, 0.0);
-
-    debug[id] = vec4<f32>(loc, 0.0);
-} // Constants for particle constraints
-const CONSTRAIN: bool = false;
-const CONSTRAIN_TO: f32 = 0.1;  // meters
-
-struct ComputeMotionParams {
-    dt: f32,
-    nCurrentSegments: u32,
-    solenoidFlux: f32,
-    enableParticleFieldContributions: u32,
-}
-
-@group(0) @binding(0) var<storage, read_write> nParticles: u32;
-@group(0) @binding(1) var<storage, read_write> particlePos: array<vec4<f32>>;
-@group(0) @binding(2) var<storage, read_write> particleVel: array<vec4<f32>>;
-@group(0) @binding(3) var<storage, read> currentSegments: array<vec4<f32>>;
-@group(0) @binding(4) var<storage, read_write> debug: array<vec4<f32>>;
-@group(0) @binding(5) var<uniform> params: ComputeMotionParams;
-
-@compute @workgroup_size(256)
-fn computeMotion(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let id = global_id.x;
-    if (id >= nParticles) {
-        return;
-    }
-
-    let species = particlePos[id].w;
-    if (species == 0.0) {
-        return; // inactive particle
-    }
-
-    // Extract position and charge-to-mass ratio for this particle
-    let pos = vec3<f32>(particlePos[id].xyz);
-    let vel = vec3<f32>(particleVel[id].xyz);
-    let mass = particle_mass(species);
-    let q_over_m = charge_to_mass_ratio(species);
-
-    // Calculate the E and B field at particle position
-    var E = vec3<f32>(0.0, 0.0, 0.0);
-    var B = vec3<f32>(0.0, 0.0, 0.0);
-
-    if (params.enableParticleFieldContributions != 0u) {
-        var collider_id: i32 = -1;
-        compute_particle_field_contributions(nParticles, &particlePos, &particleVel, pos, i32(id), &E, &B, &collider_id);
-        
-        // to avoid both work items spawning a new particle, check id < collider_id, which will only be true for one of them
-        if (collider_id >= 0 && i32(id) < collider_id) {
-            let collider_pos = vec3<f32>(particlePos[u32(collider_id)].xyz);
-            let collider_vel = vec3<f32>(particleVel[u32(collider_id)].xyz);
-            let collider_mass = particle_mass(particlePos[u32(collider_id)].w);
-            let collision_r_norm = normalize(pos - collider_pos);
-
-            // Relative velocity
-            let v = collider_vel - vel;
-
-            // Relative velocity along the line of collision
-            let v_dot_r = dot(v, collision_r_norm);
-
-            // If the relative velocity along the line of collision is >= 0, they are moving apart
-            if (v_dot_r >= 0.0) {
-                return;
-            }
-
-            // Impulse scalar
-            let impulse = (2.0 * v_dot_r) / (mass + collider_mass);
-
-            // Compute new velocities
-            let vel_new = vel + impulse * mass * collision_r_norm;
-            let collider_vel_new = collider_vel - impulse * mass * collision_r_norm;
-
-            particleVel[id] = vec4<f32>(vel_new, 0.0);
-            particleVel[u32(collider_id)] = vec4<f32>(collider_vel_new, 0.0);
-
-            // Create new particle
-            let new_idx = nParticles + id;
-            particlePos[new_idx] = vec4<f32>(pos.x + 0.01, pos.y + 0.01, pos.z + 0.01, 1.0);
-            particleVel[new_idx] = vec4<f32>(0.0, 10000.0, 0.0, 0.0);
-        }
-    }
-
-    compute_current_field_contributions(&currentSegments, params.nCurrentSegments, pos, &B);
-
-    // Calculate the contribution of the central solenoid
-    let solenoid_axis = vec3<f32>(0.0, 1.0, 0.0);
-    let solenoid_r = vec3<f32>(pos.x, 0.0, pos.z);
-    let solenoid_e_mag = params.solenoidFlux / (2.0 * PI * length(solenoid_r));
-    E += solenoid_e_mag * cross(solenoid_axis, normalize(solenoid_r));
-
-    // Push the particle through the electric and magnetic field: dv/dt = q/m (E + v x B);
-    let t = q_over_m * B * 0.5 * params.dt;
-    let s = 2.0 * t / (1.0 + (length(t) * length(t)));
-    let v_minus = vel + q_over_m * E * 0.5 * params.dt;
-    let v_prime = v_minus + cross(v_minus, t);
-    let v_plus = v_minus + cross(v_prime, s);
-    let vel_new = v_plus + (q_over_m * E * 0.5 * params.dt);
-    let pos_new = pos + (vel_new * params.dt);
-
-    particlePos[id] = vec4<f32>(pos_new, species);
-    particleVel[id] = vec4<f32>(vel_new, 0.0);
-
-    let v_mag = length(vel_new);
-    debug[id] = vec4<f32>(0.5 * mass * v_mag * v_mag, species, 0.0, 0.0);
-
-    if (CONSTRAIN) {
-        // Keep the particles in their box
-        if (particlePos[id].x > CONSTRAIN_TO) {
-            particleVel[id].x = -particleVel[id].x;
-        }
-        if (particlePos[id].x < -CONSTRAIN_TO) {
-            particleVel[id].x = -particleVel[id].x;
-        }
-        if (particlePos[id].y > CONSTRAIN_TO) {
-            particleVel[id].y = -particleVel[id].y;
-        }
-        if (particlePos[id].y < -CONSTRAIN_TO) {
-            particleVel[id].y = -particleVel[id].y;
-        }
-        if (particlePos[id].z > CONSTRAIN_TO) {
-            particleVel[id].z = -particleVel[id].z;
-        }
-        if (particlePos[id].z < -CONSTRAIN_TO) {
-            particleVel[id].z = -particleVel[id].z;
-        }
-    }
-} // Physical constants
-const PI: f32 = 3.14159265953;
-const EPSILON_0: f32 = 8.854187817e-12;
-const MU_0: f32 = 1.25663706144e-6;
-const Q_E: f32 = 1.602176487e-19;
-const K_E: f32 = 1.0 / (4.0 * PI * EPSILON_0);
-const MU_0_OVER_4_PI: f32 = MU_0 / (4.0 * PI);
-const _M: f32 = 1.0; // meter
-
-// Particle masses
-const M_ELECTRON: f32 = 9.10938188e-31;
-const M_PROTON: f32 = 1.67262158e-27;
-const M_NEUTRON: f32 = 1.67492716e-27;
-const M_DEUTERIUM: f32 = 3.34449439e-27;
-const M_TRITIUM: f32 = 5.00826721e-27;
-const M_HELIUM_4_NUC: f32 = 6.64647309e-27;
-const M_DEUTERON: f32 = 3.34358347e-27;
-const M_TRITON: f32 = 5.00735629e-27;
-
-// Charge-to-mass ratios
-const Q_OVER_M_ELECTRON: f32 = -1.75882020109e11;
-const Q_OVER_M_PROTON: f32 = 9.57883424534e7;
-const Q_OVER_M_HELIUM_4_NUC: f32 = 2.41056642418e7;
-const Q_OVER_M_DEUTERON: f32 = 4.79179449646e7;
-const Q_OVER_M_TRITON: f32 = 3.19964547001e7;
-
-// Particle species enum
-const NEUTRON: f32 = 1.0;
-const ELECTRON: f32 = 2.0;
-const PROTON: f32 = 3.0;
-const DEUTERIUM: f32 = 4.0;
-const TRITIUM: f32 = 5.0;
-const HELIUM_4_NUC: f32 = 6.0;
-const DEUTERON: f32 = 7.0;
-const TRITON: f32 = 8.0;
-
-fn particle_mass(species: f32) -> f32 {
-    if (species == NEUTRON) {
-        return M_NEUTRON;
-    } else if (species == ELECTRON) {
-        return M_ELECTRON;
-    } else if (species == PROTON) {
-        return M_PROTON;
-    } else if (species == DEUTERIUM) {
-        return M_DEUTERIUM;
-    } else if (species == TRITIUM) {
-        return M_TRITIUM;
-    } else if (species == HELIUM_4_NUC) {
-        return M_HELIUM_4_NUC;
-    } else if (species == DEUTERON) {
-        return M_DEUTERON;
-    } else if (species == TRITON) {
-        return M_TRITON;
-    }
-    return 0.0; // error case, should never happen
-}
-
-fn particle_charge(species: f32) -> f32 {
-    if (species == NEUTRON) {
-        return 0.0; // neutron
-    } else if (species == ELECTRON) {
-        return -Q_E; // electron
-    } else if (species == PROTON) {
-        return Q_E; // proton
-    } else if (species == DEUTERIUM) {
-        return 0.0; // deuterium
-    } else if (species == TRITIUM) {
-        return 0.0; // tritium
-    } else if (species == HELIUM_4_NUC) {
-        return 2.0 * Q_E; // helium4
-    } else if (species == DEUTERON) {
-        return Q_E; // ion_deuterium
-    } else if (species == TRITON) {
-        return Q_E; // ion_tritium
-    }
-    return 0.0; // error case, should never happen
-}
-
-fn charge_to_mass_ratio(species: f32) -> f32 {
-    if (species == NEUTRON) {
-        return 0.0;
-    } else if (species == ELECTRON) {
-        return Q_OVER_M_ELECTRON;
-    } else if (species == PROTON) {
-        return Q_OVER_M_PROTON;
-    } else if (species == DEUTERIUM) {
-        return 0.0;
-    } else if (species == TRITIUM) {
-        return 0.0;
-    } else if (species == HELIUM_4_NUC) {
-        return Q_OVER_M_HELIUM_4_NUC;
-    } else if (species == DEUTERON) {
-        return Q_OVER_M_DEUTERON;
-    } else if (species == TRITON) {
-        return Q_OVER_M_TRITON;
-    }
-    return 0.0; // error case, should never happen
 }struct VertexInput {
     @location(0) position: vec3f,
     @location(1) color: vec3f,
@@ -985,295 +735,47 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     return input.color;
 }
-struct VertexInput {
-    @location(0) position: vec3f,
-    @location(1) species: f32,
-}
-
-struct VertexOutput {
-    @builtin(position) position: vec4f,
-    @location(0) color: vec4f,
-    @location(1) pointSize: f32,
-}
-
-struct Uniforms {
-    view: mat4x4f,
-    projection: mat4x4f,
-}
-
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-@vertex
-fn vertexMain(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    
-    // Calculate the position in view space
-    let viewPos = uniforms.view * vec4f(input.position, 1.0);
-    
-    // Calculate the distance from the camera to the point
-    let distance = length(viewPos.xyz);
-    
-    // Set point size based on the distance (closer points are larger)
-    output.pointSize = 10.0 / (distance + 1.0); // Adjust constants as needed
-    
-    // Final position of the vertex in clip space
-    output.position = uniforms.projection * viewPos;
-    
-    // Set color based on species
-         if (input.species == 1.0) { output.color = vec4f(0.5, 0.5, 0.5, 1.0); } // neutrons are gray
-    else if (input.species == 2.0) { output.color = vec4f(0.0, 0.0, 1.0, 1.0); } // electrons are blue
-    else if (input.species == 3.0) { output.color = vec4f(1.0, 0.0, 0.0, 1.0); } // protons are red
-    else if (input.species == 4.0) { output.color = vec4f(0.0, 1.0, 0.0, 1.0); } // deuterium is green
-    else if (input.species == 5.0) { output.color = vec4f(1.0, 0.0, 1.0, 1.0); } // tritium is purple
-    else if (input.species == 6.0) { output.color = vec4f(1.0, 0.7, 0.0, 1.0); } // helium-4 is orange
-    else if (input.species == 7.0) { output.color = vec4f(0.0, 0.8, 0.0, 1.0); } // deuterons is light green
-    else if (input.species == 8.0) { output.color = vec4f(0.8, 0.0, 0.8, 1.0); } // tritons is light purple
-    else { output.color = vec4f(1.0, 1.0, 1.0, 1.0); } // default white
-    
-    return output;
-}
-
-@fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-    return input.color;
-}
-struct Uniforms {
-    model: mat4x4<f32>,
-    view: mat4x4<f32>,
-    projection: mat4x4<f32>,
-    solenoidFlux: f32,
-}
-
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) normal: vec3<f32>,
-}
-
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) normal: vec3<f32>,
-    @location(1) worldPos: vec3<f32>,
-}
-
-@vertex
-fn vertexMain(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    let worldPos = uniforms.model * vec4<f32>(input.position, 1.0);
-    output.position = uniforms.projection * uniforms.view * worldPos;
-    output.normal = (uniforms.model * vec4<f32>(input.normal, 0.0)).xyz;
-    output.worldPos = worldPos.xyz;
-    return output;
-}
-
-@fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-    let lightDir = normalize(vec3<f32>(1.0, 1.0, 1.0));
-    let brightness = max(dot(normalize(input.normal), lightDir), 0.1);
-    
-    if (uniforms.solenoidFlux != 0.0) {
-        return vec4(vec3(0.3, 1.0, 0.3) * brightness, 1.0); // Green color with lighting effect
-    } else {
-        return vec4(vec3(0.6, 0.6, 0.6) * brightness, 1.0); // Light gray color with lighting effect
-    }
-} struct Uniforms {
-    view: mat4x4<f32>,
-    projection: mat4x4<f32>,
-    toroidalI: f32,
-}
-
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) normal: vec3<f32>,
-    @location(2) modelMatrix0: vec4<f32>,
-    @location(3) modelMatrix1: vec4<f32>,
-    @location(4) modelMatrix2: vec4<f32>,
-    @location(5) modelMatrix3: vec4<f32>,
-}
-
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) normal: vec3<f32>,
-    @location(1) worldPos: vec3<f32>,
-}
-
-@vertex
-fn vertexMain(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    
-    // Reconstruct model matrix from vertex attributes
-    let modelMatrix = mat4x4<f32>(
-        input.modelMatrix0,
-        input.modelMatrix1,
-        input.modelMatrix2,
-        input.modelMatrix3
-    );
-    
-    let worldPos = modelMatrix * vec4<f32>(input.position, 1.0);
-    output.position = uniforms.projection * uniforms.view * worldPos;
-    output.normal = (modelMatrix * vec4<f32>(input.normal, 0.0)).xyz;
-    output.worldPos = worldPos.xyz;
-    return output;
-}
-
-@fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-    let lightDir = normalize(vec3<f32>(1.0, 1.0, 1.0));
-    let brightness = max(dot(normalize(input.normal), lightDir), 0.1);
-    
-    if (uniforms.toroidalI != 0.0) {
-        return vec4(vec3(0.3, 0.7, 1.0) * brightness, 1.0); // Blue color with lighting effect
-    } else {
-        return vec4(vec3(0.6, 0.6, 0.6) * brightness, 1.0); // Light gray color with lighting effect
-    }
-} struct Uniforms {
-    model: mat4x4<f32>,
+struct UniformData {
     view: mat4x4<f32>,
     projection: mat4x4<f32>,
 }
 
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(0) var<uniform> uniforms: UniformData;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) color: vec4<f32>,
-    @location(2) age: f32,
+    @location(1) center: vec3<f32>,
+    @builtin(instance_index) instance: u32,
 }
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) color: vec4<f32>,
-    @location(1) age: f32,
+    @location(0) color: vec3<f32>,
 }
 
 @vertex
 fn vertexMain(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    let worldPos = uniforms.model * vec4<f32>(input.position, 1.0);
-    output.position = uniforms.projection * uniforms.view * worldPos;
-    output.color = input.color;
-    output.age = input.age;
-    return output;
+    // Translate the vertex to the cell center
+    let world_pos = input.center + input.position;
+    
+    // Transform to clip space
+    let clip_pos = uniforms.projection *  uniforms.view * vec4<f32>(world_pos, 1.0);
+    
+    // Generate color based on position (for debugging/visualization)
+    let color = vec3<f32>(
+        0.5 + 0.5 * sin(input.center.x * 10.0),
+        0.5 + 0.5 * sin(input.center.y * 10.0),
+        0.5 + 0.5 * sin(input.center.z * 10.0)
+    );
+    
+    return VertexOutput(clip_pos, color);
 }
 
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Fade out based on age
-    let alpha = 1.0 - input.age;
-    return vec4<f32>(input.color.rgb, input.color.a * alpha);
-} struct Uniforms {
-    view: mat4x4<f32>,
-    projection: mat4x4<f32>,
-}
-
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) location: vec4<f32>,  // Instance data: position + field type (0=E, 1=B)
-    @location(2) field: vec4<f32>,     // Instance data: field vector
-}
-
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) fieldType: f32,       // 0.0 for E field, 1.0 for B field
-}
-
-// Compute rotation matrix to map vector [0, 0, 1] onto vector b
-fn rotationMatrix(b: vec3<f32>) -> mat3x3<f32> {
-    let u = normalize(b);
-    let v = vec3<f32>(0.0, 0.0, 1.0);
-
-    let axis = cross(u, v);
-    let cosA = dot(u, v);
-    let Vx = mat3x3<f32>(
-        vec3<f32>(0.0, -axis.z, axis.y),
-        vec3<f32>(axis.z, 0.0, -axis.x),
-        vec3<f32>(-axis.y, axis.x, 0.0)
-    );
-
-    let I = mat3x3<f32>(
-        vec3<f32>(1.0, 0.0, 0.0),
-        vec3<f32>(0.0, 1.0, 0.0),
-        vec3<f32>(0.0, 0.0, 1.0)
-    );
-
-    return I + Vx + (1.0 / (1.0 + cosA)) * (Vx * Vx);
-}
-
-fn translate(t: vec4<f32>) -> mat4x4<f32> {
-    return mat4x4<f32>(
-        vec4<f32>(1.0, 0.0, 0.0, 0.0),
-        vec4<f32>(0.0, 1.0, 0.0, 0.0),
-        vec4<f32>(0.0, 0.0, 1.0, 0.0),
-        vec4<f32>(t.x, t.y, t.z, 1.0)
-    );
-}
-
-@vertex
-fn vertexMain(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    
-    let rotation = rotationMatrix(input.field.xyz);
-    let rotation4 = mat4x4<f32>(
-        vec4<f32>(rotation[0], 0.0),
-        vec4<f32>(rotation[1], 0.0),
-        vec4<f32>(rotation[2], 0.0),
-        vec4<f32>(0.0, 0.0, 0.0, 1.0)
-    );
-    
-    let worldPos = translate(input.location) * rotation4 * vec4<f32>(input.position, 1.0);
-    output.position = uniforms.projection * uniforms.view * worldPos;
-    output.fieldType = input.location.w;  // 0.0 for E field, 1.0 for B field
-    
-    return output;
-}
-
-@fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Color based on field type: E field = red, B field = blue
-    let color = select(
-        vec3<f32>(1.0, 0.0, 0.0),  // Red for E field (input.fieldType == 0.0)
-        vec3<f32>(0.0, 0.0, 1.0),  // Blue for B field (input.fieldType == 1.0)
-        input.fieldType > 0.5
-    );
-    
-    return vec4<f32>(color, 1.0);
+    return vec4<f32>(input.color, 1.0);
 } struct VertexInput {
     @location(0) position: vec3f,
-    @location(1) color: vec3f,
-}
-
-struct VertexOutput {
-    @builtin(position) position: vec4f,
-    @location(0) color: vec4f,
-}
-
-struct Uniforms {
-    model: mat4x4f,
-    view: mat4x4f,
-    projection: mat4x4f,
-}
-
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-@vertex
-fn vertexMain(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    output.position = uniforms.projection * uniforms.view * uniforms.model * vec4f(input.position, 1.0);
-    output.color = vec4f(input.color, 0.0);
-    return output;
-}
-
-@fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-    return input.color;
-}
-struct VertexInput {
-    @location(0) position: vec3f,
     @location(1) species: f32,
 }
 
@@ -1296,12 +798,6 @@ fn vertexMain(input: VertexInput) -> VertexOutput {
     
     // Calculate the position in view space
     let viewPos = uniforms.view * vec4f(input.position, 1.0);
-    
-    // Calculate the distance from the camera to the point
-    let distance = length(viewPos.xyz);
-    
-    // Set point size based on the distance (closer points are larger)
-    output.pointSize = 10.0 / (distance + 1.0); // Adjust constants as needed
     
     // Final position of the vertex in clip space
     output.position = uniforms.projection * viewPos;
@@ -1364,6 +860,66 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
     } else {
         return vec4(vec3(0.6, 0.6, 0.6) * brightness, 1.0); // Light gray color with lighting effect
     }
+} struct VertexInput {
+    @location(0) position: vec3f,
+}
+
+struct InstanceInput {
+    @location(1) instancePosition: vec4f,
+}
+
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) color: vec4f,
+    @location(1) worldPos: vec3f,
+    @location(2) normal: vec3f,
+}
+
+struct Uniforms {
+    view: mat4x4f,
+    projection: mat4x4f,
+}
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+@vertex
+fn vertexMain(input: VertexInput, instance: InstanceInput) -> VertexOutput {
+    var output: VertexOutput;
+    
+    // Scale the sphere vertex by a small radius
+    let sphereRadius = 0.001; // Small sphere radius
+    let worldPos = instance.instancePosition.xyz + input.position * sphereRadius;
+    
+    // Calculate the position in view space
+    let viewPos = uniforms.view * vec4f(worldPos, 1.0);
+    
+    // Final position of the vertex in clip space
+    output.position = uniforms.projection * viewPos;
+    
+    // Pass world position and normal for lighting
+    output.worldPos = worldPos;
+    output.normal = normalize(input.position);
+    
+    // Set color based on species (same as particles.wgsl)
+         if (instance.instancePosition.w == 1.0) { output.color = vec4f(0.5, 0.5, 0.5, 1.0); } // neutrons are gray
+    else if (instance.instancePosition.w == 2.0) { output.color = vec4f(0.0, 0.0, 1.0, 1.0); } // electrons are blue
+    else if (instance.instancePosition.w == 3.0) { output.color = vec4f(1.0, 0.0, 0.0, 1.0); } // protons are red
+    else if (instance.instancePosition.w == 4.0) { output.color = vec4f(0.0, 1.0, 0.0, 1.0); } // deuterium is green
+    else if (instance.instancePosition.w == 5.0) { output.color = vec4f(1.0, 0.0, 1.0, 1.0); } // tritium is purple
+    else if (instance.instancePosition.w == 6.0) { output.color = vec4f(1.0, 0.7, 0.0, 1.0); } // helium-4 is orange
+    else if (instance.instancePosition.w == 7.0) { output.color = vec4f(0.0, 0.8, 0.0, 1.0); } // deuterons is light green
+    else if (instance.instancePosition.w == 8.0) { output.color = vec4f(0.8, 0.0, 0.8, 1.0); } // tritons is light purple
+    else { output.color = vec4f(1.0, 1.0, 1.0, 1.0); } // default white
+    
+    return output;
+}
+
+@fragment
+fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+    // Simple lighting calculation
+    let lightDir = normalize(vec3f(1.0, 1.0, 1.0));
+    let diffuse = max(dot(input.normal, lightDir), 0.2);
+    return input.color * vec4f(diffuse, diffuse, diffuse, 1.0);
 } struct Uniforms {
     view: mat4x4<f32>,
     projection: mat4x4<f32>,
@@ -1417,40 +973,44 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
         return vec4(vec3(0.6, 0.6, 0.6) * brightness, 1.0); // Light gray color with lighting effect
     }
 } struct Uniforms {
-    model: mat4x4<f32>,
     view: mat4x4<f32>,
     projection: mat4x4<f32>,
+    color: vec4f,
+    headIdx: u32,
+    tracerLength: u32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
 struct VertexInput {
+    @builtin(vertex_index) idx: u32,
     @location(0) position: vec3<f32>,
-    @location(1) color: vec4<f32>,
-    @location(2) age: f32,
 }
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) color: vec4<f32>,
-    @location(1) age: f32,
+    @location(0) alpha: f32,
 }
 
 @vertex
 fn vertexMain(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
-    let worldPos = uniforms.model * vec4<f32>(input.position, 1.0);
-    output.position = uniforms.projection * uniforms.view * worldPos;
-    output.color = input.color;
-    output.age = input.age;
+
+    // Calculate the position in view space
+    let viewPos = uniforms.view * vec4f(input.position, 1.0);
+
+    // Final position of the vertex in clip space
+    output.position = uniforms.projection * viewPos;
+
+    let distFromHead = ((uniforms.headIdx - (input.idx % uniforms.tracerLength)) % uniforms.tracerLength);
+    output.alpha = 1.0 - (f32(distFromHead) / f32(uniforms.tracerLength));
+
     return output;
 }
 
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Fade out based on age
-    let alpha = 1.0 - input.age;
-    return vec4<f32>(input.color.rgb, input.color.a * alpha);
+    return vec4(uniforms.color.x, uniforms.color.y, uniforms.color.z, input.alpha);
 } struct Uniforms {
     view: mat4x4<f32>,
     projection: mat4x4<f32>,

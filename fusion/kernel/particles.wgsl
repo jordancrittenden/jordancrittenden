@@ -77,13 +77,11 @@ fn computeMotion(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
     }
 
-    compute_current_field_contributions(&currentSegments, params.nCurrentSegments, pos, &B);
+    // Calculate the contribution of the currents
+    B += compute_currents_b_field(&currentSegments, params.nCurrentSegments, pos);
 
     // Calculate the contribution of the central solenoid
-    let solenoid_axis = vec3<f32>(0.0, 1.0, 0.0);
-    let solenoid_r = vec3<f32>(pos.x, 0.0, pos.z);
-    let solenoid_e_mag = params.solenoidFlux / (2.0 * PI * length(solenoid_r));
-    E += solenoid_e_mag * cross(solenoid_axis, normalize(solenoid_r));
+    E += compute_solenoid_e_field(params.solenoidFlux, pos);
 
     // Push the particle through the electric and magnetic field: dv/dt = q/m (E + v x B);
     let t = q_over_m * B * 0.5 * params.dt;
@@ -98,7 +96,7 @@ fn computeMotion(@builtin(global_invocation_id) global_id: vec3<u32>) {
     particleVel[id] = vec4<f32>(vel_new, 0.0);
 
     let v_mag = length(vel_new);
-    debug[id] = vec4<f32>(0.5 * mass * v_mag * v_mag, species, 0.0, 0.0);
+    debug[id] = vec4<f32>(B, 0.0);
 
     if (CONSTRAIN) {
         // Keep the particles in their box

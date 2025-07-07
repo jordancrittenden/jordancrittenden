@@ -27,7 +27,7 @@ var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIR
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmpl704m93_.js
+// include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmpj06aczcc.js
 
   Module['expectedDataFileDownloads'] ??= 0;
   Module['expectedDataFileDownloads']++;
@@ -138,9 +138,7 @@ var REMOTE_PACKAGE_SIZE = metadata['remote_package_size'];
         if (!check) throw msg + new Error().stack;
       }
 Module['FS_createPath']("/", "kernel", true, true);
-Module['FS_createPath']("/kernel", "wgpu", true, true);
 Module['FS_createPath']("/", "shader", true, true);
-Module['FS_createPath']("/shader", "wgpu", true, true);
 
       /** @constructor */
       function DataRequest(start, end, audio) {
@@ -207,25 +205,25 @@ Module['FS_createPath']("/shader", "wgpu", true, true);
     }
 
     }
-    loadPackage({"files": [{"filename": "/shader/axes.wgsl", "start": 35004, "end": 35688}, {"filename": "/shader/particles.wgsl", "start": 35688, "end": 37659}, {"filename": "/shader/solenoid.wgsl", "start": 37659, "end": 38900}, {"filename": "/shader/torus.wgsl", "start": 38900, "end": 40490}, {"filename": "/shader/tracer.wgsl", "start": 40490, "end": 41409}, {"filename": "/shader/vector.wgsl", "start": 41409, "end": 43724}, {"filename": "/shader/wgpu/axes.wgsl", "start": 43724, "end": 44408}, {"filename": "/shader/wgpu/particles.wgsl", "start": 44408, "end": 46379}, {"filename": "/shader/wgpu/solenoid.wgsl", "start": 46379, "end": 47620}, {"filename": "/shader/wgpu/torus.wgsl", "start": 47620, "end": 49210}, {"filename": "/shader/wgpu/tracer.wgsl", "start": 49210, "end": 50129}, {"filename": "/shader/wgpu/vector.wgsl", "start": 50129, "end": 52444}], "remote_package_size": 52444});
+    loadPackage({"files": [{"filename": "/shader/axes.wgsl", "start": 27496, "end": 28180}, {"filename": "/shader/cell_box.wgsl", "start": 28180, "end": 29259}, {"filename": "/shader/particles.wgsl", "start": 29259, "end": 30972}, {"filename": "/shader/solenoid.wgsl", "start": 30972, "end": 32213}, {"filename": "/shader/spheres.wgsl", "start": 32213, "end": 34660}, {"filename": "/shader/torus.wgsl", "start": 34660, "end": 36250}, {"filename": "/shader/tracer.wgsl", "start": 36250, "end": 37303}, {"filename": "/shader/vector.wgsl", "start": 37303, "end": 39618}], "remote_package_size": 39618});
 
   })();
 
-// end include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmpl704m93_.js
-// include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmpzcobctjs.js
+// end include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmpj06aczcc.js
+// include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmphzjxe38_.js
 
     // All the pre-js content up to here must remain later on, we need to run
     // it.
     if ((typeof ENVIRONMENT_IS_WASM_WORKER != 'undefined' && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != 'undefined' && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != 'undefined' && ENVIRONMENT_IS_AUDIO_WORKLET)) Module['preRun'] = [];
     var necessaryPreJSTasks = Module['preRun'].slice();
-  // end include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmpzcobctjs.js
-// include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmp95jo9b8c.js
+  // end include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmphzjxe38_.js
+// include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmp7xgt49jc.js
 
     if (!Module['preRun']) throw 'Module.preRun should exist because file support used it; did a pre-js delete it?';
     necessaryPreJSTasks.forEach((task) => {
       if (Module['preRun'].indexOf(task) < 0) throw 'All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?';
     });
-  // end include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmp95jo9b8c.js
+  // end include: /var/folders/p1/wwnyccxn69x5208lhvhgqbrw0000gn/T/tmp7xgt49jc.js
 
 
 var arguments_ = [];
@@ -9382,7 +9380,7 @@ var dynCall_viiiii = makeInvalidEarlyAccess('dynCall_viiiii');
 var dynCall_viii = makeInvalidEarlyAccess('dynCall_viii');
 var dynCall_i = makeInvalidEarlyAccess('dynCall_i');
 var dynCall_vii = makeInvalidEarlyAccess('dynCall_vii');
-var dynCall_viif = makeInvalidEarlyAccess('dynCall_viif');
+var dynCall_viiii = makeInvalidEarlyAccess('dynCall_viiii');
 var dynCall_iii = makeInvalidEarlyAccess('dynCall_iii');
 var dynCall_vi = makeInvalidEarlyAccess('dynCall_vi');
 var dynCall_v = makeInvalidEarlyAccess('dynCall_v');
@@ -9390,7 +9388,6 @@ var dynCall_viji = makeInvalidEarlyAccess('dynCall_viji');
 var dynCall_jiji = makeInvalidEarlyAccess('dynCall_jiji');
 var dynCall_iidiiii = makeInvalidEarlyAccess('dynCall_iidiiii');
 var dynCall_viijii = makeInvalidEarlyAccess('dynCall_viijii');
-var dynCall_viiii = makeInvalidEarlyAccess('dynCall_viiii');
 var dynCall_iiiii = makeInvalidEarlyAccess('dynCall_iiiii');
 var dynCall_iiiiii = makeInvalidEarlyAccess('dynCall_iiiiii');
 var dynCall_iiiiiiiii = makeInvalidEarlyAccess('dynCall_iiiiiiiii');
@@ -9457,7 +9454,7 @@ function assignWasmExports(wasmExports) {
   dynCalls['viii'] = dynCall_viii = createExportWrapper('dynCall_viii', 4);
   dynCalls['i'] = dynCall_i = createExportWrapper('dynCall_i', 1);
   dynCalls['vii'] = dynCall_vii = createExportWrapper('dynCall_vii', 3);
-  dynCalls['viif'] = dynCall_viif = createExportWrapper('dynCall_viif', 4);
+  dynCalls['viiii'] = dynCall_viiii = createExportWrapper('dynCall_viiii', 5);
   dynCalls['iii'] = dynCall_iii = createExportWrapper('dynCall_iii', 3);
   dynCalls['vi'] = dynCall_vi = createExportWrapper('dynCall_vi', 2);
   dynCalls['v'] = dynCall_v = createExportWrapper('dynCall_v', 1);
@@ -9465,7 +9462,6 @@ function assignWasmExports(wasmExports) {
   dynCalls['jiji'] = dynCall_jiji = createExportWrapper('dynCall_jiji', 4);
   dynCalls['iidiiii'] = dynCall_iidiiii = createExportWrapper('dynCall_iidiiii', 7);
   dynCalls['viijii'] = dynCall_viijii = createExportWrapper('dynCall_viijii', 6);
-  dynCalls['viiii'] = dynCall_viiii = createExportWrapper('dynCall_viiii', 5);
   dynCalls['iiiii'] = dynCall_iiiii = createExportWrapper('dynCall_iiiii', 5);
   dynCalls['iiiiii'] = dynCall_iiiiii = createExportWrapper('dynCall_iiiiii', 6);
   dynCalls['iiiiiiiii'] = dynCall_iiiiiiiii = createExportWrapper('dynCall_iiiiiiiii', 9);
